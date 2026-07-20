@@ -76,3 +76,5 @@ __pypackages__/
 # Secrets
 *.pem
 *.key
+# Data
+*.parquet
