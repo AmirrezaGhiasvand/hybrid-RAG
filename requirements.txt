@@ -3,3 +3,4 @@ ipykernel
 bm25s
 elasticsearch
 python-dotenv
+sentence_transformers
