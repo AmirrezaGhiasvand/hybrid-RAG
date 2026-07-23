@@ -2,3 +2,4 @@ datasets
 ipykernel
 bm25s
 elasticsearch
+python-dotenv
