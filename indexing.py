@@ -1,12 +1,9 @@
 """
-Run this once (and again whenever the corpus or embedding model changes) to
+Run once (and again whenever the corpus or embedding model changes) to
 build the Elasticsearch index: embeds every document with a free local
 HuggingFace model, caches the embedding matrix to disk, creates an ES index
 with both a `text` field (BM25) and an `embedding` field (dense_vector,
 cosine similarity), and bulk-loads everything in.
-
-Usage:
-    python indexing.py
 """
 
 import numpy as np
@@ -14,10 +11,13 @@ import pandas as pd
 from elasticsearch.helpers import bulk
 from sentence_transformers import SentenceTransformer
 
-from config import DATA_DIR, INDEX_DIR, INDEX_NAME, MODEL_NAME, EMBEDDING_DIMS
+from config import DATA_DIR, EMBEDDING_DIMS, INDEX_DIR, INDEX_NAME, MODEL_NAME
 from esClient import es
 
 
+# ---------------------------------------------------------------------------
+# Load and embed corpus
+# ---------------------------------------------------------------------------
 def load_corpus() -> pd.DataFrame:
     """Load the FiQA corpus parquet file."""
     corpus = pd.read_parquet(DATA_DIR / "corpus.parquet")
@@ -33,7 +33,9 @@ def embed_corpus(doc_texts: list[str], model: SentenceTransformer) -> np.ndarray
         print(f"Loading cached embeddings from {embeddings_path}")
         return np.load(embeddings_path)
 
-    print(f"Embedding {len(doc_texts)} docs locally with {MODEL_NAME} (free, no API cost)")
+    print(
+        f"Embedding {len(doc_texts)} docs locally with {MODEL_NAME} (free, no API cost)"
+    )
     embeddings = model.encode(
         doc_texts,
         batch_size=256,
@@ -44,16 +46,15 @@ def embed_corpus(doc_texts: list[str], model: SentenceTransformer) -> np.ndarray
     return embeddings
 
 
+# ---------------------------------------------------------------------------
+# Create and cache the indexes
+# ---------------------------------------------------------------------------
 def create_index():
     """Create (or recreate) the ES index with BM25 + dense_vector mapping."""
     index_settings = {
         "settings": {
-            "similarity": {
-                "default": {"type": "BM25", "k1": 1.2, "b": 0.75}
-            },
-            "analysis": {
-                "analyzer": {"default": {"type": "english"}}
-            }
+            "similarity": {"default": {"type": "BM25", "k1": 1.2, "b": 0.75}},
+            "analysis": {"analyzer": {"default": {"type": "english"}}},
         },
         "mappings": {
             "properties": {
@@ -78,6 +79,7 @@ def create_index():
 
 def bulk_index(doc_ids: list, doc_texts: list[str], doc_embeddings: np.ndarray):
     """Bulk-load documents (text + embedding together) into the ES index."""
+
     def doc_generator():
         for doc_id, text, vec in zip(doc_ids, doc_texts, doc_embeddings):
             yield {
@@ -95,11 +97,16 @@ def bulk_index(doc_ids: list, doc_texts: list[str], doc_embeddings: np.ndarray):
         doc_generator(),
         chunk_size=500,
     )
-    print(f"Indexed: {success} docs | Errors: {len(errors) if isinstance(errors, list) else errors}")
+    print(
+        f"Indexed: {success} docs | Errors: {len(errors) if isinstance(errors, list) else errors}"
+    )
 
     es.indices.refresh(index=INDEX_NAME)
 
 
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 def main():
     corpus = load_corpus()
     doc_ids = corpus["_id"].tolist()

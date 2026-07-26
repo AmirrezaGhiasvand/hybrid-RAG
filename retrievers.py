@@ -3,7 +3,6 @@ Search functions for the hybrid retrieval project. Assumes indexing.py has
 already been run and the ES index exists. Import these into any script or
 notebook without re-embedding or re-indexing anything.
 
-    from retrievers import search_bm25, search_dense, search_hybrid_boost, search_hybrid_rrf
 """
 
 from collections import defaultdict
@@ -12,7 +11,7 @@ import numpy as np
 import pandas as pd
 from sentence_transformers import SentenceTransformer
 
-from config import DATA_DIR, INDEX_NAME, MODEL_NAME, K_RRF
+from config import DATA_DIR, INDEX_NAME, K_RRF, MODEL_NAME
 from esClient import es
 
 # Loaded once at import time, reused across all search calls.
@@ -26,7 +25,7 @@ def embed_query(query: str) -> list[float]:
 
 
 def normalize_scores(
-    results: list[tuple[str, float, str]]
+    results: list[tuple[str, float, str]],
 ) -> list[tuple[str, float, str]]:
     """Min-max normalize scores within a result list to [0, 1].
 
@@ -45,6 +44,11 @@ def normalize_scores(
     return [(doc_id, (s - lo) / (hi - lo), text) for doc_id, s, text in results]
 
 
+# ---------------------------------------------------------------------------
+# BM25 (Exact match)
+# ---------------------------------------------------------------------------
+
+
 def search_bm25(query: str, top_k: int = 10, normalize: bool = False):
     """Keyword search only -- best for exact terms, symbols, codes."""
     resp = es.search(
@@ -52,8 +56,15 @@ def search_bm25(query: str, top_k: int = 10, normalize: bool = False):
         query={"match": {"text": query}},
         size=top_k,
     )
-    results = [(h["_id"], h["_score"], h["_source"]["text"]) for h in resp["hits"]["hits"]]
+    results = [
+        (h["_id"], h["_score"], h["_source"]["text"]) for h in resp["hits"]["hits"]
+    ]
     return normalize_scores(results) if normalize else results
+
+
+# ---------------------------------------------------------------------------
+# Dense
+# ---------------------------------------------------------------------------
 
 
 def search_dense(query: str, top_k: int = 10, normalize: bool = False):
@@ -68,11 +79,20 @@ def search_dense(query: str, top_k: int = 10, normalize: bool = False):
         },
         size=top_k,
     )
-    results = [(h["_id"], h["_score"], h["_source"]["text"]) for h in resp["hits"]["hits"]]
+    results = [
+        (h["_id"], h["_score"], h["_source"]["text"]) for h in resp["hits"]["hits"]
+    ]
     return normalize_scores(results) if normalize else results
 
 
-def search_hybrid_boost(query: str, top_k: int = 10, candidate_k: int = 50, weight: float = 0.5):
+# ---------------------------------------------------------------------------
+# Hybrid Boost
+# ---------------------------------------------------------------------------
+
+
+def search_hybrid_boost(
+    query: str, top_k: int = 10, candidate_k: int = 50, weight: float = 0.5
+):
     """BM25 + dense combined by normalizing each to [0, 1] first, then
     blending with a weighted average. This avoids the naive-boost bug: raw
     BM25 scores (unbounded, often 15-30+) completely dwarf raw cosine scores
@@ -99,15 +119,7 @@ def search_hybrid_boost(query: str, top_k: int = 10, candidate_k: int = 50, weig
 # ---------------------------------------------------------------------------
 # RECIPROCAL RANK FUSION (RRF)
 # ---------------------------------------------------------------------------
-# Fuse RANKINGS instead of raw scores. BM25 scores are unbounded while
-# cosine similarities sit in [0, 1] -- averaging them directly is comparing
-# apples to oranges. RRF only cares about each doc's rank position in each
-# retriever's list, which sidesteps the scale mismatch entirely.
-#
-#   rrf_score(d) = sum over each retriever r of 1 / (k + rank_r(d))
-#
-# k is a smoothing constant, conventionally 60 (Cormack et al., 2009:
-# https://plg.uwaterloo.ca/~gvcormac/cormacksigir09-rrf.pdf).
+
 
 def reciprocal_rank_fusion(
     rankings: list[list[str]], k: int = K_RRF
@@ -120,7 +132,9 @@ def reciprocal_rank_fusion(
     return sorted(scores.items(), key=lambda x: -x[1])
 
 
-def search_hybrid_rrf(query: str, top_k: int = 10, candidate_k: int = 50, normalize: bool = False):
+def search_hybrid_rrf(
+    query: str, top_k: int = 10, candidate_k: int = 50, normalize: bool = False
+):
     """Retrieve top candidate_k from BM25 and dense separately, fuse by
     rank (RRF), return top_k. Two ES calls + local fusion, but scale-safe
     by construction -- RRF never touches raw scores, only rank position."""

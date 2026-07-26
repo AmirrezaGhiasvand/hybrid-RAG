@@ -6,7 +6,7 @@ Single shared Elasticsearch client. Both indexing.py and retrievers.py import
 import urllib3
 from elasticsearch import Elasticsearch
 
-from config import ES_HOST, ES_USER, ES_PASSWORD
+from config import ES_HOST, ES_PASSWORD, ES_USER
 
 # Silence "InsecureRequestWarning" -- we're intentionally skipping cert
 # verification for a local self-signed certificate (dev only).
