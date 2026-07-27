@@ -10,17 +10,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# ---------------------------------------------------------------------------
-# Paths
-# ---------------------------------------------------------------------------
+# --- Paths ---
 BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "data" / "fiqa"
 INDEX_DIR = BASE_DIR / "indexes" / "dense_hf"
 INDEX_DIR.mkdir(parents=True, exist_ok=True)
 
-# ---------------------------------------------------------------------------
-# Elasticsearch
-# ---------------------------------------------------------------------------
+# --- Elasticsearch ---
 INDEX_NAME = "fiqa-hybrid"
 ES_HOST = "https://localhost:9200"  # https, since security is enabled
 ES_USER = "elastic"
@@ -29,11 +25,17 @@ if not ES_PASSWORD:
     raise ValueError("ES_PASSWORD environment variable is not set")
 assert isinstance(ES_PASSWORD, str)  # narrows type for downstream imports
 
-# ---------------------------------------------------------------------------
-# Embedding model
-# ---------------------------------------------------------------------------
+# --- Embedding model ---
 MODEL_NAME = "all-MiniLM-L6-v2"  # free, local, 384-dim
 EMBEDDING_DIMS = 384
 
-# RRF
+# --- RRF ---
 K_RRF = 60  # smoothing constant, conventionally 60 (Cormack et al., 2009)
+
+# --- OpenRouter (agentic RAG) ---
+# Not required for indexing/retrieval/eval -- only checked when agentic_rag.py runs.
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+AGENT_MODEL = (
+    "openai/gpt-4o-mini"  # cheap, reliable tool-calling. Swap for any OpenRouter model.
+)
